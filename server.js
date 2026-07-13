@@ -31,10 +31,12 @@ const COOKIE_NOME = "token";
 function emitirToken(res, usuarioId) {
   const token = jwt.sign({ sub: usuarioId }, JWT_SECRET, { expiresIn: JWT_EXPIRA_EM });
 
+  const isProd = process.env.NODE_ENV === "production";
+
   res.cookie(COOKIE_NOME, token, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: isProd ? "none" : "lax",  // "none" permite cross-origin em produção
+    secure: isProd,                      // obrigatório quando sameSite é "none"
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 }
