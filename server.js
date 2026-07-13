@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import validator from "validator";
 import {
   criarUsuario,
   buscarUsuarioPorEmail,
@@ -113,14 +114,23 @@ app.post("/api/registro", limitadorAuth, async (req, res) => {
     const { nome, email, senha } = req.body ?? {};
 
     //validações antes do banco
-    if (!nome || nome.trim().length < 2) {
-      return res.status(400).json({ erro: "Nome deve ter pelo menos 2 caracteres." });
+    // Tamanho máximo para evitar payloads gigantes
+    if (!nome || nome.trim().length < 2 || nome.trim().length > 50) {
+      return res.status(400).json({ erro: "Nome deve ter entre 2 e 50 caracteres." });
     }
-    if (!email || !emailValido(email)) {
+
+    // Sanitiza o nome
+    // remove tags HTML, espaços extras
+    const nomeSeguro = validator.escape(nome.trim());
+
+    if (!email || !validator.isEmail(email)) {
       return res.status(400).json({ erro: "E-mail inválido." });
     }
-    if (!senha || senha.length < 8) {
-      return res.status(400).json({ erro: "Senha deve ter pelo menos 8 caracteres." });
+
+    if (!senha || senha.length < 8 || senha.length > 72) {
+      // 72 é o limite do bcrypt
+      // senhas maiores são truncadas silenciosamente
+      return res.status(400).json({ erro: "Senha deve ter entre 8 e 72 caracteres." });
     }
 
     const emailNormalizado = email.toLowerCase().trim();
@@ -131,11 +141,11 @@ app.post("/api/registro", limitadorAuth, async (req, res) => {
 
     //bcrypt é assíncrono de propósito , é intencionalmente lento
     const senhaHash = await bcrypt.hash(senha, SALT_ROUNDS);
-    const resultado = criarUsuario(nome.trim(), emailNormalizado, senhaHash);
+    const resultado = criarUsuario(nomeSeguro, emailNormalizado, senhaHash);
 
     return res.status(201).json({
       mensagem: "Conta criada com sucesso.",
-      usuario: { id: resultado.lastInsertRowid, nome: nome.trim() },
+      usuario: { id: resultado.lastInsertRowid, nome: nomeSeguro },
     });
   } catch (err) {
     console.error("[registro]", err);
@@ -202,8 +212,24 @@ app.post("/api/aportes", autenticar, (req, res) => {
 app.post("/api/aportes/ticker", autenticar, (req, res) => {
   const { nome, quantidade, preco_unitario, data } = req.body ?? {};
 
-  if (!nome || !quantidade || !preco_unitario || !data) {
-    return res.status(400).json({ erro: "nome, quantidade, preco_unitario e data são obrigatórios." });
+  // Ticker: só letras e números, máximo 10 caracteres
+  if (!nome || !/^[A-Z0-9]{1,10}$/.test(nome.toUpperCase().trim())) {
+    return res.status(400).json({ erro: "Ticker inválido." });
+  }
+
+  // Quantidade: número positivo, máximo razoável
+  if (!quantidade || quantidade <= 0 || quantidade > 1_000_000) {
+    return res.status(400).json({ erro: "Quantidade inválida." });
+  }
+
+  // Preço: número positivo, máximo razoável
+  if (!preco_unitario || preco_unitario <= 0 || preco_unitario > 10_000_000) {
+    return res.status(400).json({ erro: "Preço inválido." });
+  }
+
+  // Data: formato YYYY-MM-DD válido
+  if (!data || !validator.isDate(data, { format: "YYYY-MM-DD" })) {
+    return res.status(400).json({ erro: "Data inválida. Use o formato YYYY-MM-DD." });
   }
 
   const ativo = buscarAtivoPorNome(nome);
