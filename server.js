@@ -63,8 +63,11 @@ app.use(cookieParser()); //lê o header Cookie da requisição e transforma num 
 app.use(express.json());
 app.use(express.static("public"));
 app.use(cors({
-  origin: "http://localhost:5173",  // endereço do React
-  credentials: true,                // permite enviar cookies JWT
+  origin: [
+    "http://localhost:5173",
+    "https://dashboard-acoes-react.vercel.app",
+  ],
+  credentials: true, //permite enviar cookies JWT
 }));
 
 app.get("/", (req, res) => {
