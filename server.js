@@ -62,7 +62,7 @@ function autenticar(req, res, next) {
 }
 
 function emailValido(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return validator.isEmail(email);
 }
 
 // Limite geral — todas as rotas
@@ -123,7 +123,7 @@ app.post("/api/registro", limitadorAuth, async (req, res) => {
     // remove tags HTML, espaços extras
     const nomeSeguro = validator.escape(nome.trim());
 
-    if (!email || !validator.isEmail(email)) {
+    if (!email || !emailValido(email)) {
       return res.status(400).json({ erro: "E-mail inválido." });
     }
 
