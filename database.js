@@ -1,5 +1,4 @@
 import Database from "better-sqlite3";
-import path from "path";
 
 const DB_PATH = process.env.NODE_ENV === "production"
   ? "/data/carteira.db"
@@ -59,6 +58,26 @@ export function criarUsuario(nome, email, senhaHash) {
   return db
     .prepare("INSERT INTO usuarios (nome, email, senha_hash) VALUES (?, ?, ?)")
     .run(nome, email, senhaHash);
+}
+
+export function contarAtivosUsuario(usuario_id) {
+  return db
+    .prepare(
+      `SELECT COUNT(DISTINCT ativo_id) AS total
+       FROM aportes
+       WHERE usuario_id = ?`
+    )
+    .get(usuario_id).total;
+}
+
+export function usuarioPossuiAtivo(usuario_id, ativo_id) {
+  return db
+    .prepare(
+      `SELECT 1 FROM aportes 
+       WHERE usuario_id = ? AND ativo_id = ? 
+       LIMIT 1`
+    )
+    .get(usuario_id, ativo_id);
 }
 
 //FUNÇÕES DE ATIVO

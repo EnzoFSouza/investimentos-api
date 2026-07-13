@@ -9,6 +9,8 @@ import {
   criarUsuario,
   buscarUsuarioPorEmail,
   buscarUsuarioPorId,
+  contarAtivosUsuario,
+  usuarioPossuiAtivo,
   criarAtivo,
   buscarAtivoPorNome,
   listarAtivos,
@@ -172,7 +174,12 @@ app.post("/api/login", limitadorAuth, async (req, res) => {
 });
 
 app.post("/api/logout", (req, res) => {
-  res.clearCookie(COOKIE_NOME, { httpOnly: true, sameSite: "lax" });
+  const isProd = process.env.NODE_ENV === "production";
+  res.clearCookie(COOKIE_NOME, {
+    httpOnly: true,
+    sameSite: isProd ? "none" : "lax",
+    secure: isProd,
+  });
   return res.json({ mensagem: "Logout realizado." });
 });
 
@@ -202,6 +209,19 @@ app.post("/api/aportes/ticker", autenticar, (req, res) => {
   const ativo = buscarAtivoPorNome(nome);
   if (!ativo) {
     return res.status(404).json({ erro: `Ativo "${nome.toUpperCase()}" não está disponível.` });
+  }
+
+  // Limite de 40 ativos distintos por usuário
+  // Verifica se o usuário já tem esse ativo
+  // Se sim, é aporte em ativo existente (não conta)
+  // Se não tem, verifica o limite de 40 ativos distintos
+  const jaTemEsseAtivo = usuarioPossuiAtivo(req.usuario.sub, ativo.id);
+
+  if (!jaTemEsseAtivo) {
+    const totalAtivos = contarAtivosUsuario(req.usuario.sub);
+    if (totalAtivos >= 40) {
+      return res.status(400).json({ erro: "Limite de 40 ativos por carteira atingido." });
+    }
   }
 
   const r = criarAporte(req.usuario.sub, ativo.id, quantidade, preco_unitario, data);
