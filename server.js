@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import {
   criarUsuario,
   buscarUsuarioPorEmail,
@@ -61,6 +62,25 @@ function emailValido(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// Limite geral — todas as rotas
+const limitadorGeral = rateLimit({
+  windowMs: 15 * 60 * 1000, // janela de 15 minutos
+  max: 100,                  // máximo 100 requisições por IP
+  message: { erro: "Muitas requisições. Tente novamente em 15 minutos." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Limite mais restritivo para login e registro — previne brute force
+const limitadorAuth = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,                   // máximo 10 tentativas por IP
+  message: { erro: "Muitas tentativas. Tente novamente em 15 minutos." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(limitadorGeral);
 app.use(cookieParser()); //lê o header Cookie da requisição e transforma num objeto req.cookies
 app.use(express.json());
 app.use(express.static("public"));
@@ -86,7 +106,7 @@ app.get("/api/eu", autenticar, (req, res) => {
   return res.json({ usuario });
 });
 
-app.post("/api/registro", async (req, res) => {
+app.post("/api/registro", limitadorAuth, async (req, res) => {
   try {
     const { nome, email, senha } = req.body ?? {};
 
@@ -121,7 +141,7 @@ app.post("/api/registro", async (req, res) => {
   }
 });
 
-app.post("/api/login", async (req, res) => {
+app.post("/api/login", limitadorAuth, async (req, res) => {
   try {
     const { email, senha } = req.body ?? {};
 
