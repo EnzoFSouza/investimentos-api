@@ -1,17 +1,21 @@
 # Investimentos API
 
-API REST para gerenciamento de carteira de investimentos pessoais. Desenvolvida com foco em solidez arquitetural. O objetivo é ter um backend bem estruturado que sirva como base para múltiplos projetos frontend independentes, sem duplicação de lógica.
+API REST para gerenciamento de carteira de investimentos pessoais. Desenvolvida com foco em solidez arquitetural — o objetivo é ter um backend bem estruturado que sirva como base para múltiplos projetos frontend independentes, sem duplicação de lógica de negócio.
+
+🔗 **Base URL:** `https://investimentos-api-production.up.railway.app`
 
 ## Motivação
 
-Em vez de criar um backend acoplado a cada projeto de interface, esta API centraliza toda a lógica de autenticação, persistência e cálculos financeiros em um único serviço. Frontends em React, HTML/CSS/JS ou outra tecnologia consomem as mesmas rotas, as mudanças no backend refletem automaticamente em todos os clientes.
+Em vez de criar um backend acoplado a cada projeto de interface, esta API centraliza toda a lógica de autenticação, persistência e cálculos financeiros em um único serviço. Frontends em React, HTML/CSS/JS ou qualquer outra tecnologia consomem as mesmas rotas — mudanças no backend refletem automaticamente em todos os clientes.
 
 ## Stack
 
 - **Node.js** com **Express 5**
-- **SQLite** via `better-sqlite3`
+- **SQLite** via `better-sqlite3` com volume persistente no Railway
 - **JWT** em cookie `httpOnly` para autenticação
-- **bcrypt** para hash de senhas
+- **bcrypt** (12 rounds) para hash de senhas
+- **express-rate-limit** para proteção contra brute force
+- **validator.js** para sanitização e validação de inputs
 - **dotenv** para variáveis de ambiente
 
 ## Modelagem do banco de dados
@@ -26,7 +30,7 @@ usuarios
 
 ativos
 ├── id           INTEGER PK AUTOINCREMENT
-├── nome         TEXT NOT NULL UNIQUE   ← ticker (ex: WEGE3)
+├── nome         TEXT NOT NULL UNIQUE   ← ticker (ex: PETR4)
 ├── tipo         TEXT NOT NULL          ← ação, FII, criptomoeda
 └── preco_atual  REAL NOT NULL
 
@@ -41,17 +45,33 @@ aportes
 
 **Decisões de modelagem:**
 
-`ON DELETE CASCADE` em `aportes.usuario_id` — ao deletar um usuário, todos os seus aportes são removidos automaticamente, evitando dados órfãos.
+`ON DELETE CASCADE` em `aportes.usuario_id`: ao deletar um usuário, todos os seus aportes são removidos automaticamente, evitando dados órfãos.
 
-`ON DELETE RESTRICT` em `aportes.ativo_id` — impede a remoção de um ativo que ainda possui aportes vinculados, protegendo a integridade histórica dos dados.
+`ON DELETE RESTRICT` em `aportes.ativo_id`: impede a remoção de um ativo que ainda possui aportes vinculados, protegendo a integridade histórica dos dados.
 
-A tabela `ativos` é global (compartilhada entre usuários), enquanto `aportes` é individual, ou seja, cada usuário tem seu próprio histórico de compras sobre os ativos disponíveis.
+A tabela `ativos` é global (compartilhada entre usuários), enquanto `aportes` é individual: cada usuário tem seu próprio histórico de compras sobre os ativos disponíveis.
 
-## Autenticação
+## Segurança
 
-JWT armazenado em cookie `httpOnly`, assim o token nunca é acessível via JavaScript no navegador, reduzindo superfície de ataque contra XSS. O cookie é enviado automaticamente pelo navegador em todas as requisições para a API.
+**Autenticação via JWT em cookie `httpOnly`**: o token nunca é acessível via JavaScript no navegador, reduzindo a superfície de ataque contra XSS. Em produção, o cookie é configurado com `sameSite: "none"` e `secure: true` para permitir comunicação cross-origin entre Vercel e Railway.
 
-O middleware `autenticar` valida o token em todas as rotas protegidas antes de processar a requisição.
+**Rate limiting em duas camadas:**
+- Limite geral: 100 requisições por IP a cada 15 minutos
+- Limite de autenticação: 10 tentativas por IP a cada 15 minutos nas rotas `/api/login` e `/api/registro` — previne ataques de brute force. Retorna `429 Too Many Requests` com header `Retry-After: 900` ao atingir o limite.
+
+**Sanitização e validação de inputs:**
+- Nomes sanitizados com `validator.escape()` — previne injeção de HTML
+- E-mails validados com `validator.isEmail()`
+- Senhas limitadas a 72 caracteres — evita truncamento silencioso do bcrypt
+- Tickers validados com regex `^[A-Z0-9]{1,10}$` — só aceita formato válido
+- Datas validadas com `validator.isDate()` no formato `YYYY-MM-DD`
+- Limites numéricos em quantidade e preço — previne dados absurdos
+
+**Limite de 40 ativos distintos por usuário** — controla crescimento do banco sem impedir aportes adicionais em ativos já existentes na carteira.
+
+**Prepared statements** em todas as queries — previne SQL injection.
+
+**CORS restritivo** — aceita requisições apenas dos domínios autorizados.
 
 ## Rotas
 
@@ -123,10 +143,11 @@ npm install
 cp .env.example .env
 ```
 
-Edite o `.env` com os valores:
+Edite o `.env`:
 ```
-JWT_SECRET=sua_chave
+JWT_SECRET=chave_secreta_longa_e_aleatoria
 PORT=3000
+NODE_ENV=development
 ```
 
 **3. Popular o banco com os ativos iniciais:**
@@ -145,23 +166,20 @@ npm start
 
 O servidor sobe em `http://localhost:3000`.
 
+> Em produção, o script `start` executa `seed.js` antes de iniciar o servidor — garantindo que os ativos estejam sempre disponíveis após um novo deploy.
+
 ## Estrutura do projeto
 
 ```
 investimentos-api/
 ├── database.js     ← configuração do SQLite e todas as funções de acesso ao banco
-├── server.js       ← definição das rotas e middlewares Express
-├── seed.js         ← script para popular o banco com ativos iniciais
-├── carteira.db     ← arquivo do banco SQLite (não commitado)
+├── server.js       ← rotas, middlewares e validações
+├── seed.js         ← popula o banco com ativos iniciais
+├── carteira.db     ← banco SQLite (não commitado)
 ├── .env            ← variáveis de ambiente (não commitado)
 ├── .env.example    ← template das variáveis necessárias
 └── package.json
 ```
-
-## Frontends que consomem esta API
-
-- **[Dashboard React](https://github.com/EnzoFSouza/Dashboard-Acoes-React)** — interface em React + Tailwind CSS com autenticação, visualização de carteira e registro de aportes.
-- **[Plataforma HTML/CSS/JS](https://github.com/EnzoFSouza/MVP-Site-Investimentos)** — versão anterior da interface, desenvolvida sem frameworks.
 
 ## Variáveis de ambiente
 
@@ -169,4 +187,9 @@ investimentos-api/
 |----------|-----------|-------------|
 | `JWT_SECRET` | Chave para assinar os tokens JWT | Sim |
 | `PORT` | Porta do servidor (padrão: 3000) | Não |
-| `NODE_ENV` | Ambiente (`production` ativa cookie `secure`) | Não |
+| `NODE_ENV` | Ambiente (`production` ativa cookie `secure` e `sameSite: none`) | Não |
+
+## Frontends que consomem esta API
+
+- **[Dashboard React](https://github.com/EnzoFSouza/Dashboard-Acoes-React)** — interface em React + Tailwind CSS com autenticação, visualização de carteira e registro de aportes. Deploy na Vercel: [dashboard-acoes-react.vercel.app](https://dashboard-acoes-react.vercel.app)
+- **[Plataforma HTML/CSS/JS](https://github.com/EnzoFSouza/MVP-Site-Investimentos)** — versão anterior da interface, desenvolvida sem frameworks.

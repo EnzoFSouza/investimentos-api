@@ -96,7 +96,7 @@ app.use(cors({
 }));
 
 app.get("/", (req, res) => {
-  res.redirect("/login.html");
+  res.redirect("https://dashboard-acoes-react.vercel.app");
 });
 
 app.get("/api/ping", (req, res) => {
