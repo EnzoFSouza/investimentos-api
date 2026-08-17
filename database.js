@@ -1,8 +1,6 @@
 import Database from "better-sqlite3";
 
-const DB_PATH = process.env.NODE_ENV === "production"
-  ? "/data/carteira.db"
-  : "carteira.db";
+const DB_PATH = process.env.DB_PATH || "carteira.db";
 
 const db = new Database(DB_PATH);
 
