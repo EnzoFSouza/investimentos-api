@@ -5,9 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node seed.js && node server.js",
-    "dev": "nodemon server.js",
-    "css": "tailwindcss -i ./input.css -o ./public/css/output.css --watch"
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "css": "tailwindcss -i ./input.css -o ./public/css/output.css --watch",
+    "build": "npm rebuild sqlite3 && node dist/seed.js",
+    "compile": "tsc"
   },
   "keywords": [],
   "author": "",
