@@ -34,6 +34,16 @@ db.exec(`
     FOREIGN KEY (ativo_id)   REFERENCES ativos(id)   ON DELETE RESTRICT
   );
 
+  CREATE TABLE IF NOT EXISTS historico_precos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ativo_id INTEGER NOT NULL,
+    preco REAL NOT NULL,
+    data TEXT NOT NULL DEFAULT (datetime('now')),
+
+    FOREIGN KEY (ativo_id) REFERENCES ativos(id) ON DELETE CASCADE
+  );
+  
+  CREATE INDEX IF NOT EXISTS idx_historico_precos_ativo ON historico_precos(ativo_id);
   CREATE INDEX IF NOT EXISTS idx_aportes_usuario       ON aportes(usuario_id);
   CREATE INDEX IF NOT EXISTS idx_aportes_ativo_usuario ON aportes(ativo_id, usuario_id);
 `);
@@ -115,9 +125,28 @@ export function listarAtivos(usuario_id) {
 }
 
 export function atualizarPrecoAtivo(id, novoPreco) {
-  return db
-    .prepare("UPDATE ativos SET preco_atual = ? WHERE id = ?")
-    .run(novoPreco, id);
+    const atualizar = db.prepare(
+        "UPDATE ativos SET preco_atual = ? WHERE id = ?"
+    );
+
+    const registrar = db.prepare(
+        `INSERT INTO historico_precos (ativo_id, preco)
+         VALUES (?, ?)`
+    );
+
+    const atualizarERegistrar = db.transaction(() => {
+        const resultado = atualizar.run(novoPreco, id);
+
+        if (resultado.changes === 0) {
+            return resultado;
+        }
+
+        registrar.run(id, novoPreco);
+
+        return resultado;
+    });
+
+    return atualizarERegistrar();
 }
 
 //FUNÇÕES DE APORTE
@@ -176,6 +205,26 @@ export function calcularCarteiraTotal(usuario_id) {
        WHERE ap.usuario_id = ?`
     )
     .get(usuario_id);
+}
+
+export function registrarHistoricoPreco(ativo_id, preco) {
+    return db
+        .prepare(
+            `INSERT INTO historico_precos (ativo_id, preco)
+             VALUES (?, ?)`
+        )
+        .run(ativo_id, preco);
+}
+
+export function listarHistoricoPrecos(ativo_id) {
+    return db
+        .prepare(
+            `SELECT id, ativo_id, preco, data
+             FROM historico_precos
+             WHERE ativo_id = ?
+             ORDER BY data ASC`
+        )
+        .all(ativo_id);
 }
 
 export default db;

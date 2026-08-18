@@ -21,6 +21,7 @@ import {
   deletarAporte,
   calcularResumoAtivo,
   calcularCarteiraTotal,
+  listarHistoricoPrecos,
 } from "./database.js";
 
 dotenv.config();
@@ -196,6 +197,67 @@ app.post("/api/logout", (req, res) => {
 // Lista só os ativos em que o usuário logado tem aportes
 app.get("/api/ativos", autenticar, (req, res) => {
   res.json(listarAtivos(req.usuario.sub));
+});
+
+app.put("/api/ativos/:id/preco", (req, res) => {
+    const ativoId = Number(req.params.id);
+    const { preco } = req.body;
+
+    if (!Number.isInteger(ativoId) || ativoId <= 0) {
+        return res.status(400).json({
+            erro: "ID do ativo inválido."
+        });
+    }
+
+    if (typeof preco !== "number" || !Number.isFinite(preco) || preco < 0) {
+        return res.status(400).json({
+            erro: "O preço deve ser um número válido maior ou igual a zero."
+        });
+    }
+
+    try {
+        const resultado = atualizarPrecoAtivo(ativoId, preco);
+
+        if (resultado.changes === 0) {
+            return res.status(404).json({
+                erro: "Ativo não encontrado."
+            });
+        }
+
+        return res.status(200).json({
+            mensagem: "Preço atualizado com sucesso.",
+            ativo_id: ativoId,
+            preco
+        });
+    } catch (error) {
+        console.error("Erro ao atualizar preço:", error);
+
+        return res.status(500).json({
+            erro: "Erro interno ao atualizar o preço."
+        });
+    }
+});
+
+app.get("/api/ativos/:id/historico", (req, res) => {
+    const ativoId = Number(req.params.id);
+
+    if (!Number.isInteger(ativoId) || ativoId <= 0) {
+        return res.status(400).json({
+            erro: "ID do ativo inválido."
+        });
+    }
+
+    try {
+        const historico = listarHistoricoPrecos(ativoId);
+
+        return res.status(200).json(historico);
+    } catch (error) {
+        console.error("Erro ao buscar histórico de preços:", error);
+
+        return res.status(500).json({
+            erro: "Erro interno ao buscar histórico de preços."
+        });
+    }
 });
 
 app.post("/api/aportes", autenticar, (req, res) => {
